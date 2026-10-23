@@ -37,18 +37,13 @@ MENUS = {
 }
 # ===========================================================
 
-# بنخزن بيانات الأزرار في قاموس عشان تليجرام بيحدد طول callback_data
-ACTIONS = {}
-
 def build_keyboard(menu_name):
     rows = []
     for i, (label, kind, value) in enumerate(MENUS[menu_name]["buttons"]):
         if kind == "url":
             rows.append([InlineKeyboardButton(label, url=value)])
         else:
-            key = f"{menu_name}:{i}"
-            ACTIONS[key] = (kind, value)
-            rows.append([InlineKeyboardButton(label, callback_data=key)])
+            rows.append([InlineKeyboardButton(label, callback_data=f"{menu_name}:{i}")])
     if menu_name != "main":
         rows.append([InlineKeyboardButton("🔙 رجوع للرئيسية", callback_data="home")])
     return InlineKeyboardMarkup(rows)
@@ -65,10 +60,11 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text(MENUS["main"]["text"], reply_markup=build_keyboard("main"))
         return
 
-    action = ACTIONS.get(q.data)
-    if not action:
+    try:
+        menu_name, idx = q.data.split(":")
+        _, kind, value = MENUS[menu_name]["buttons"][int(idx)]
+    except (ValueError, KeyError, IndexError):
         return
-    kind, value = action
 
     if kind == "menu":
         await q.edit_message_text(MENUS[value]["text"], reply_markup=build_keyboard(value))
@@ -88,4 +84,12 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(on_button))
-app.run_polling()
+PORT = int(os.environ.get("PORT", 10000))
+BASE_URL = os.environ["RENDER_EXTERNAL_URL"]  # Render بيحطه تلقائي
+
+app.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    url_path=TOKEN,
+    webhook_url=f"{BASE_URL}/{TOKEN}",
+)
